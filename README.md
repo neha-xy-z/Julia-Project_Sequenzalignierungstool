@@ -6,6 +6,7 @@ Li, Huije
 
 - [Kurzbeschreibung](#kurzbeschreibung)
 - [Verwendung](#verwendung)
+- [Benötigte Software](#benötigte-software)
 
 ## Kurzbeschreibung
 Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Aufbereitung (trimmen, Adaptoren / Chimären entfernen, Fehlerkorrektur) und anschließend Ausgabe der Scaffolds.
@@ -17,11 +18,15 @@ Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Auf
 3. Fastqc
 4. Vsearch
 5. Hisat2
-6. samtools
+6. Samtools
+
+Für Linux muss diese über `sudo apt-get <Software>` vorinstalliert werden.
+Für Windows muss dieser Folder heruntergeladen werden.
+_Hinweis_: Da Windows kein Hisat2 und Samtools verwenden kann, wird auch keine Alignment stattfinden. Die Ausführung mit Windows endet mit der Readaufbereitung.
 
 # Verwendung
-1. Open Julia
-2. Change to working dir. ,Where your .jl File is using ``` cd("Path to .jl File") ```
-3. Now Excute the .jl file using ``` include(yourFile.jl) ```
-4. follow the instructions (Input is your Fastq File) , if you have two Fastq Files (Read1 and Read2) try to use this script two times individually on both Files
-5. finished 
+1. Öffne Julia.
+2. Wechsele ins Working Directory, wo sich auch die ProjektJulia.jl befindet. 
+` cd("Path to .jl File") `
+3. Führe nun die .jl-Datei mit aus `include("ProjektJulia.jl")`
+4. Befolge nun die Anweisungen.
