@@ -12,7 +12,7 @@ Li, Huije
 ## Kurzbeschreibung
 Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Aufbereitung (trimmen, Adaptoren / Chimären entfernen, Fehlerkorrektur) und anschließend Ausgabe der Scaffolds.
 
-## Benötigte Software:
+## Benötigte Software
 
 1. Julia 
 2. Cutadapt
@@ -21,8 +21,8 @@ Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Auf
 5. Hisat2
 6. Samtools
 
-Für Linux muss diese über `sudo apt-get <Software>` vorinstalliert werden.
-Für Windows muss dieser Folder heruntergeladen werden.
+Für Linux muss diese über `sudo apt-get <Software>` vorinstalliert werden.<br>
+Für Windows muss dieser Ordner heruntergeladen werden.
 _Hinweis_: Da Windows kein Hisat2 und Samtools verwenden kann, wird auch keine Alignment stattfinden. Die Ausführung mit Windows endet mit der Readaufbereitung.
 
 # Verwendung
