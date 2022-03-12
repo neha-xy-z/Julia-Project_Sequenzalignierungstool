@@ -23,11 +23,11 @@ Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Auf
 5. Hisat2
 6. Samtools
 
-_P.S.: Wir haben kein STAR Aligner verwendet, weil diese Software **30 GB RAM** braucht!_
-
-Für Linux muss diese über `sudo apt-get <Software>` vorinstalliert werden.<br>
+Für Linux müssen diese über `sudo apt-get <Software>` vorinstalliert werden.<br>
 Für Windows muss dieser Ordner heruntergeladen werden. <br>
 **Hinweis**: Da Windows kein Hisat2 und Samtools verwenden kann, wird auch keine Alignment stattfinden. Die Ausführung mit Windows endet mit der Readaufbereitung.
+
+_P.S.: Wir haben keinen STAR Aligner verwendet, weil diese Software **30 GB RAM** braucht!_
 
 ## Verwendung
 1. Öffne Julia.
