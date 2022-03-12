@@ -23,5 +23,5 @@ Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Auf
 1. Open Julia
 2. Change to working dir. ,Where your .jl File is using ``` cd("Path to .jl File") ```
 3. Now Excute the .jl file using ``` include(yourFile.jl) ```
-4. follow the instructions (Input is your Fastq File)
+4. follow the instructions (Input is your Fastq File) , if you have two Fastq Files (Read1 and Read2) try to use this script two times individually on both Files
 5. finished 
