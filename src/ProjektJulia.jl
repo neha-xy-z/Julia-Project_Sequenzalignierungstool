@@ -14,7 +14,7 @@ function get_path_variable(file_path::String)
         file_name = string(split(file_fastx, ".")[1])
         work_path = string(replace(file_path, "\\"*file_fastx => ""))
     end
-    return file_name, work_path
+    return file_fastx, file_name, work_path
 end
 
 # Set Path to used Softwares for Windows   
@@ -50,9 +50,9 @@ function cutadaptUnix(adapter_seqs_str::String, input_file::String)
 end
 
 # Cutadapt Run for Windows
-function cutadaptWindows(input_cutadapt_path::String, adapter_seqs_str::String, file_fastx::String)
+function cutadaptWindows(input_cutadapt_path::String, adapter_seqs_str::String, file::String)
     cd(input_cutadapt_path)
-    run(`cutadapt-3.4.exe $adapter_seqs_str -o without_adapters.fastq $file_fastx`) # Windows
+    run(`cutadapt-3.4.exe $adapter_seqs_str -o without_adapters.fastq $file`) # Windows
     curr_dir = replace(input_cutadapt_path, "\\cutadapt" => "")
     cd(curr_dir*"\\src")
 end 
@@ -108,213 +108,6 @@ function read_adapter(fastqc_result_path::String)
     return seqs, sources, string(strip(adapter_seq_str))
 end
 
-# FastQC and Cutadapt Run for different OS Linux, Windows
-function communication()
-    org_fastq_file_path = ""
-    work_path = ""
-    file_name = ""
-    with_adapter = true
-
-    # input file 
-    while true
-        print("\nEnter path of your FASTQ file. Or type 'q' to quit.\n>>> ")
-
-        input = string(strip(readline()))
-        if input == "q"
-            println("Bye.")
-            exit()
-        elseif isfile(input)
-            if endswith(input, ".fastq")
-                org_fastq_file_path = input
-                break
-            else
-                println("ERROR:\nFile input is not a FASTQ File. Check your path again.")
-            end
-        else
-            println("ERROR:\nFile not found. Check your path again and enter on request.")
-        end
-    end
-
-    # Get Path
-    file_name, work_path = get_path_variable(org_fastq_file_path)
-
-    # Open Path Directory
-    cd(work_path)
-
-    # fastqc and cutadapt
-    while true 
-        print("\nDo you want to run FastQC to get a possible Source for an Adapter Sequence, which could be found in your input-file?
-                 \nIf yes, type 'y'.
-                 \nIf no, type 'n'. Then you can enter an individual Adapter sequence afterwards on request.
-                 \nOr type 'q' to quit.
-                 \n>>> ")
-
-        input = readline()
-
-        if input == "q"
-            println("Bye.")
-            exit()
-
-        elseif input == "y"
-        
-            if Sys.islinux()
-                # FastQC Run for OS Linux
-                fastqcUnix(file_name*".fastq")
-            else 
-                # FastQC Run for Windows
-                fastqcWindows(path_to_fastqc, org_fastq_file_path, path_to_fastqc)
-            end
-
-            println("\nFastQC successful.\n")
-
-            println("\nReading adapter sequences...\n")
-
-            if Sys.islinux()
-                adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(file_name*"_fastqc.zip")
-            else
-                adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(work_path*"\\"*file_name*"_fastqc.zip")
-            end
-            
-            println("\nAdapters found:\n")
-
-            if startswith(adapter_seq_str, "no")
-                with_adapter = false
-                println("\t"*adapter_seq_str)
-                break
-            else
-                for i = 1 : length(adapter_seqs)
-                    println(adapter_seqs[i], adapter_sources[i])
-                end
-
-                # Run Cutadapt
-                if Sys.islinux()
-                    cutadaptUnix(adapter_seq_str, file_name*".fastq")
-                    break
-                else
-                    #  Windows
-                    cutadaptWindows(path_to_cutadapt, adapter_seq_str, work_path*"\\"*file_name*".fastq")
-                    break
-                end
-            end
-
-        elseif input == "n"
-            print("\nPlease type in your adapter sequence:\n>>> ")
-
-            adapter_seq = string(strip(readline()))
-
-            if adapter_seq == ""
-                with_adapter = false
-                #TODO
-                println("no adapter seq")
-                break
-            elseif contains(adapter_seq, r"[^atcgATCG]")
-                #TODO
-                println("\n warning check again")
-            else
-                # Run Cutadapt
-                if Sys.islinux()
-                    cutadaptUnix("-a "*adapter_seq, file_name*".fastq")
-                    break
-                else
-                    cutadaptWindows(path_to_cutadapt, adapter_seq_str, work_path*"\\"*file_name*".fastq")
-                    break
-                end
-            end
-
-        else
-            #TODO
-            println("ERROR:\nWrong input.")
-        end
-    end
-
-    if Sys.islinux()
-        # Read fastq after cutadapt
-        if with_adapter
-            records = readFastq("without_adapters.fastq")
-        else
-            records = readFastq(file_name*".fastq")
-        end
-    else
-        if with_adapter
-            # find file without adapters 
-            file_without_adapters_file = path_to_cutadapt*"\\without_adapters.fastq"
-    
-            # read fastq into records
-            records = readFastq(file_without_adapters_file)
-        else
-            records = readFastq(work_path*"\\"*file_name*".fastq")
-    end
-
-    # input: threshould and min_length
-    trimm_threshold = getCheckParameter("threshold", 3, 5)
-    trimm_min_length = getCheckParameter("Minimum length", 30)
-
-    # trimming
-    trimming(records, trimm_threshold, trimm_min_length)
-
-    # vsearch
-    if Sys.islinux()
-        vsearchUnix()
-    else
-        fileForVSearch = trimming(work_path*"\\"*file_name*".fastq", fastq_records, threshold_Param, 30) 
-        vsearchrun(path_to_vsearch, fileForVSearch)
-    end
-
-    # read fasta
-    if Sys.islinux()
-        records = readFasta("nonchimeras.fasta")
-    else
-        # find vsearch file and read into records
-        vsearch_file = path_to_vsearch*"\\nonchimeras.fasta"
-        records = readFasta(vsearch_file)
-    end
-
-    # input: kmer
-    kmer = getCheckParameter("Kmer", 8, 55)
-
-    kmers_Histo_Dict = kmers_Histo(kmer, records)
-
-    # input: newRead threshold
-    newReads_threshold = getCheckParameter("newRead threshold", 6)
-
-    newReads(kmers_Histo_Dict, records, newReads_threshold, kmer)
-
-    #### Only for Linux Operating System
-
-    # Hisat2 1. Step: build index,  2. Step Alignment
-    while true
-        println("index")
-        input = string(strip(readline()))
-        if input == "q"
-            exit()
-        elseif input == "y"  # ohne index
-
-            println("file")
-
-            input_file = string(strip(readline())) #hg38.fa
-
-            hisat2_build_Unix(input_file)
-            hisat2Unix()
-            break
-        elseif input == "n"
-            println("index file")
-
-            input_file = string(strip(readline())) # index
-
-            hisat2Unix(input_file)
-            break
-        else
-            println("again")
-        end
-    end
-
-    # Samtools
-    if Sys.islinux()
-        samtoolsUnix()
-    end
-
-end
-
 # Read adapterfree fastq File and store into records
 function readFastq(input_file::String)
     # println("Reading file without adapters...")
@@ -348,7 +141,7 @@ end
 function getCheckParameter(parameter::String, min::Int, max::Int)
 
     while true
-        print("\n Parameter: ", parameter, " Minimum: ", min, " Maximum: ", max, "\n>>> ")
+        print("\n Enter Parameter for: ", parameter, "\nMinimum: ", min, ", Maximum: ", max, "\n>>> ")
 
         input_num = parse(Int, string(strip(readline())))
 
@@ -364,7 +157,7 @@ end
 function getCheckParameter(parameter::String, min::Int)
 
     while true
-        print("\n Parameter: ", parameter, " Minimum: ", min, "\n>>> ")
+        print("\n Enter Parameter for: ", parameter, "\nMinimum: ", min, "\n>>> ")
 
         input_num = parse(Int, string(strip(readline())))
 
@@ -428,16 +221,17 @@ end
 # VSearch Run for different OS Linux, Windows
 function vsearchrun(input_vsearch_path::String, input_path::String)
     if Sys.islinux()
-        run(`vsearch --uchime3_denovo $input_path --nonchimeras nonchimeras.fasta`)
+        run(`vsearch --uchime3_denovo trimmed.fastq --nonchimeras nonchimeras.fasta`)
     else
         # println(pwd())
-        cd(input_fastqc_path)
+        cd(input_vsearch_path)
         run(`vsearch --uchime3_denovo $input_path --nonchimeras nonchimeras.fasta`)
-        curr_dir = replace(input_fastqc_path, "\\vsearch\\vsearch\\bin" => "")
+        curr_dir = replace(input_vsearch_path, "\\vsearch\\vsearch\\bin" => "")
         cd(curr_dir*"\\src")
     end
 end
 
+# Ask for kmer size
 function kmer_input()
     
     println("\nEnter a kmer-size:\n")
@@ -468,7 +262,6 @@ function kmers_Histo(k, records)
     end
     return kmer_dict
 end
-
 
 # Find neighbours from a kmer
 function hammingDistance(kmer)
@@ -552,14 +345,225 @@ end
 
 # Hisat2 Alignment (Overwrite) 
 function hisat2Unix(input_index::String)
-    run(`hisat2 -p 4 --dta -x $input_index -f nonchimeras.fasta -S alignment`)
+    run(`hisat2 -p 4 --dta -x $input_index -f nonchimeras.fasta -S alignment.sam`)
 end
 
 # Samtool Output to Scaffolds
 function samtoolsUnix()
     run(`samtools sort alignment.sam -o sorted_alignment.bam`)
     run(`samtools index sorted_alignment.bam`)
-    run(`samtools idxstats sorted_alignment.bam ">" scaffolds.txt`)
+    write("scaffolds.txt", read(`samtools idxstats sorted_alignment.bam`))
+end
+
+# FastQC and Cutadapt Run for different OS Linux, Windows
+function communication()
+    org_fastq_file_path = ""
+    work_path = ""
+    file_name = ""
+    with_adapter = true
+
+    # input file 
+    while true
+        print("\nEnter absolute path of your FASTQ file. Or type 'q' to quit.\n>>> ")
+
+        input = string(strip(readline()))
+        if input == "q"
+            println("Bye.")
+            exit()
+        elseif isfile(input)
+            if endswith(input, ".fastq")
+                org_fastq_file_path = input
+                break
+            else
+                println("ERROR:\nFile input is not a FASTQ File. Check your path again.")
+            end
+        else
+            println("ERROR:\nFile not found. Check your path again and enter on request.")
+        end
+    end
+
+    # Get Path
+    file_name, work_path = get_path_variable(org_fastq_file_path)
+
+    # Open Path Directory
+    cd(work_path)
+
+    # fastqc and cutadapt
+    while true 
+        print("\nDo you want to run FastQC to get a possible Source for an Adapter Sequence, which could be found in your input-file?
+                 \nIf yes, type 'y'.
+                 \nIf no, type 'n'. Then you can enter an individual Adapter sequence afterwards on request.
+                 \nOr type 'q' to quit.
+                 \n>>> ")
+
+        input = readline()
+
+        if input == "q"
+            println("Bye.")
+            exit()
+
+        elseif input == "y"
+        
+            if Sys.islinux()
+                # FastQC Run for OS Linux
+                fastqcUnix(file_name*".fastq")
+            else 
+                # FastQC Run for Windows
+                #fastqcWindows(path_to_fastqc, org_fastq_file_path, path_to_fastqc)
+            end
+
+            println("\nFastQC successful.\n")
+
+            println("\nReading adapter sequences...\n")
+
+            if Sys.islinux()
+                adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(file_name*"_fastqc.zip")
+            else
+                adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(work_path*"\\"*file_name*"_fastqc.zip")
+            end
+            
+            println("\nAdapters found:\n")
+
+            if startswith(adapter_seq_str, "no")
+                with_adapter = false
+                println("\t"*adapter_seq_str)
+                break
+            else
+                for i = 1 : length(adapter_seqs)
+                    println(adapter_seqs[i], adapter_sources[i])
+                end
+
+                # Run Cutadapt
+                if Sys.islinux()
+                    cutadaptUnix(adapter_seq_str, file_name*".fastq")
+                    break
+                else
+                    #  Windows
+                    #cutadaptWindows(path_to_cutadapt, adapter_seq_str, work_path*"\\"*file_name*".fastq")
+                    break
+                end
+            end
+
+        elseif input == "n"
+            print("\nPlease type in your adapter sequence:\n>>> ")
+
+            adapter_seq = string(strip(readline()))
+
+            if adapter_seq == ""
+                with_adapter = false
+                #TODO
+                println("no adapter seq")
+                break
+            elseif contains(adapter_seq, r"[^atcgATCG]")
+                #TODO
+                println("\n warning check again")
+            else
+                # Run Cutadapt
+                if Sys.islinux()
+                    cutadaptUnix("-a "*adapter_seq, file_name*".fastq")
+                    break
+                else
+                    cutadaptWindows(path_to_cutadapt, adapter_seq_str, work_path*"\\"*file_name*".fastq")
+                    break
+                end
+            end
+
+        else
+            #TODO
+            println("ERROR:\nWrong input.")
+        end
+    end
+
+    if Sys.islinux()
+        # Read fastq after cutadapt
+        if with_adapter
+            records = readFastq("without_adapters.fastq")
+        else
+            records = readFastq(file_name*".fastq")
+        end
+    else
+        if with_adapter
+            # find file without adapters 
+            file_without_adapters_file = path_to_cutadapt*"\\without_adapters.fastq"
+    
+            # read fastq into records
+            records = readFastq(file_without_adapters_file)
+        else
+            records = readFastq(work_path*"\\"*file_name*".fastq")
+        end
+    end
+
+    # input: threshould and min_length
+    trimm_threshold = getCheckParameter("threshold", 3, 5)
+    trimm_min_length = getCheckParameter("Minimum length", 30)
+
+    # Trimming
+    trimming(records, trimm_threshold, trimm_min_length)
+
+    # vsearch and trimming
+    if Sys.islinux()
+        vsearchUnix()
+    else
+        curr_dir = pwd()
+        fileForVSearch = curr_dir*"\\trimmed.fastq"
+        vsearchrun(path_to_vsearch, fileForVSearch)
+    end
+
+    # read fasta
+    if Sys.islinux()
+        records = readFasta("nonchimeras.fasta")
+    else
+        # find vsearch file and read into records
+        vsearch_file = path_to_vsearch*"\\nonchimeras.fasta"
+        records = readFasta(vsearch_file)
+    end
+
+    # input: kmer
+    kmer = getCheckParameter("Kmer", 8, 55)
+
+    kmers_Histo_Dict = kmers_Histo(kmer, records)
+
+    # input: newRead threshold
+    newReads_threshold = getCheckParameter("newRead threshold", 6)
+
+    newReads(kmers_Histo_Dict, records, newReads_threshold, kmer)
+
+    #### Only for Linux Operating System
+
+    if Sys.islinux()
+        # Hisat2 1. Step: build index,  2. Step Alignment
+        while true
+            println("\nDo you have indexed files for the required genome? Type 'y', if yes. Else 'n' for no.\n Or type 'q' to quit.")
+            input = string(strip(readline()))
+            if input == "q"
+                exit()
+            elseif input == "n"  # ohne index
+
+                println("\nType in the absoulte path of your genome FASTA-file.")
+
+                input_file = string(strip(readline())) #hg38.fa
+
+                hisat2_build_Unix(input_file)
+                hisat2Unix()
+                break
+
+            elseif input == "y"
+                println("\nType in the absolute path for the index-file, which should only contain the prefix without extension.\n (Example: 'your/path/to/indexFiles/genome')")
+
+                input_file = string(strip(readline())) # index
+
+                hisat2Unix(input_file)
+                break
+            else
+                println("Wrong input.")
+            end
+        end
+        # samtools
+        samtoolsUnix()
+    else
+        println("FASTA File has been succesfully created and saved.")
+    end
+
 end
 
 communication()
