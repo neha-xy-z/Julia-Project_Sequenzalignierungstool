@@ -8,6 +8,7 @@ Li, Huije
 - [Benötigte Software](#benötigte-software)
 - [Verwendung](#verwendung)
 
+![Screenshots](Screenshots.png)
 
 ## Kurzbeschreibung
 Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Aufbereitung (trimmen, Adaptoren / Chimären entfernen, Fehlerkorrektur) und anschließend Ausgabe der Scaffolds.
