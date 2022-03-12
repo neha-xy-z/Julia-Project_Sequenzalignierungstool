@@ -15,8 +15,8 @@ Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Auf
 
 1. Julia 
 2. Cutadapt
-3. Fastqc
-4. Vsearch
+3. FastQC
+4. VSearch
 5. Hisat2
 6. Samtools
 
@@ -26,7 +26,7 @@ _Hinweis_: Da Windows kein Hisat2 und Samtools verwenden kann, wird auch keine A
 
 # Verwendung
 1. Öffne Julia.
-2. Wechsele ins Working Directory, wo sich auch die ProjektJulia.jl befindet. 
+2. Wechsele ins Working Directory, wo sich auch die ProjektJulia.jl befindet. <br>
 ` cd("Path to .jl File") `
 3. Führe nun die .jl-Datei mit aus `include("ProjektJulia.jl")`
 4. Befolge nun die Anweisungen.
