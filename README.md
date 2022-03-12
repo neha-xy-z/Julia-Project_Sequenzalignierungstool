@@ -9,7 +9,7 @@ Li, Huije
 - [Verwendung](#verwendung)
 
 #### Screenshot
-![Screenshot](Screenshot.png)
+![Screenshot](Screenshot.png =250x250)
 
 ## Kurzbeschreibung
 Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Aufbereitung (trimmen, Adaptoren / Chimären entfernen, Fehlerkorrektur) und anschließend Ausgabe der Scaffolds.
