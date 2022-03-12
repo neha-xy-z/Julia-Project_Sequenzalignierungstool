@@ -10,7 +10,7 @@ Li, Huije
 ## Kurzbeschreibung
 Sequenzalignierungstool (für RNA-Seq-Data) mit Referenzgenom inklusive Read-Aufbereitung (trimmen, Adaptoren / Chimären entfernen, Fehlerkorrektur) und anschließend Ausgabe der Scaffolds.
 
-## Benötigte Softwares :
+## Benötigte Software:
 
 1. Julia 
 2. Cutadapt
