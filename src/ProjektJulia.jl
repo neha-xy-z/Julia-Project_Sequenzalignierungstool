@@ -1,197 +1,226 @@
-module ProjektJulia
-
 # Needed Modules
 using FASTX
 using ZipFile
-import FASTX.FASTQ
-import Base
 
-# globals
-global adapter_seq = Ref("")
-global adapter_seq_str = Ref("")
-global fastqFile = Ref("")
+# Set Path For Linux
+function get_path_variable(file_path::String)
 
-#julia> pwd()
-#julia> cd("C:\\Users\\PC\\ProjektJulia\\src")
-#julia> include("ProjektJulia.jl")
-# C:\Users\PC\Downloads\SRR14608302\SRR14608302.fastq
-
-# Needed file
-function askForFileAndDoesFileExist()
-    print("\nEnter path of your FASTQ file. \n\n")
-    f = readline()
-    if isfile(f)
-        if endswith(f, ".fastq")
-            return f
-        else
-            print("File input is not a FASTQ File. Check your path again.")
-        end
-    else
-        print("File not found. Check your path again and enter on request. Or type 'q' to quit.\n\n")
-        if readline() == "q"
-            print("Bye.")
-            return
-        else 
-            askForFileAndDoesFileExist()
-        end
-    end
-end
-
-fastqFile = askForFileAndDoesFileExist()
-
-# Set Path
-function set_path(file_path::String)
     if Sys.islinux()
-        file_fastx = string(split(file_path, "/")[end])
-        file_name = string(split(file_fastx, ".")[1])
-        work_path = string(replace(file_path, "/"*file_fastx => ""))
+        file_fastx = string(split(file_path, "/")[end])     # xxx.fastq
+        file_name = string(split(file_fastx, ".")[1])       # xxx
+        work_path = string(replace(file_path, "/"*file_fastx => ""))    # xx/xx/xx
     else
         file_fastx = string(split(file_path, "\\")[end])
         file_name = string(split(file_fastx, ".")[1])
         work_path = string(replace(file_path, "\\"*file_fastx => ""))
     end
-    return file_fastx, file_name, work_path
+    return file_name, work_path
 end
 
-file_fastx, file_name, work_path = set_path(fastqFile)
-    
-# Set Path to used Softwares    
-function setPathToSoftware()
+# Set Path to used Softwares for Windows   
+function setPathToSoftwareForWindows()
     curr_dir = pwd()
-    if Sys.islinux()
-        curr_dir = replace(curr_dir, "/src" => "")
+    curr_dir = replace(curr_dir, "\\src" => "")
 
-        path_to_cutadapt = curr_dir*"/cutadapt"
-        path_to_fastqc = curr_dir*"/fastqc/FastQC"
-        path_to_vsearch = curr_dir*"/vsearch/vsearch/bin"
-    else
-        curr_dir = replace(curr_dir, "\\src" => "")
-
-        path_to_cutadapt = curr_dir*"\\cutadapt"
-        path_to_fastqc = curr_dir*"\\fastqc\\FastQC"
-        path_to_vsearch = curr_dir*"\\vsearch\\vsearch\\bin"
-    end
+    path_to_cutadapt = curr_dir*"\\cutadapt"
+    path_to_fastqc = curr_dir*"\\fastqc\\FastQC"
+    path_to_vsearch = curr_dir*"\\vsearch\\vsearch\\bin"
+   
     return path_to_cutadapt, path_to_fastqc, path_to_vsearch
 end
 
-path_to_cutadapt, path_to_fastqc, path_to_vsearch = setPathToSoftware()
+path_to_cutadapt, path_to_fastqc, path_to_vsearch = setPathToSoftwareForWindows()
 
-# Cutadapt Run for different OS Linux, Windows
-function cutadapt(adapter_seqs_str::String, file_fastx::String)
-    if Sys.islinux()
-        run(`cutadapt -j 0 $adapter_seqs_str -o without_adapters.fastq $file_fastx`)
-    else
-        cd(path_to_cutadapt)
-        run(`cutadapt-3.4.exe $adapter_seqs_str -o without_adapters.fastq $file_fastx`) # Windows
-        curr_dir = replace(path_to_cutadapt, "\\cutadapt" => "")
-        cd(curr_dir*"\\src")
-    end
+# FastQC Unix Function
+function fastqcUnix(input_file::String)
+    run(`fastqc $input_file`)
 end
 
+# FastQC Memory Function
+function fastqcWindows(input_fastqc_path::String, input_path::String, output_path::String)
+    cd(input_fastqc_path)
+    run(`java -Xmx250m -classpath .";"./sam-1.103.jar";"./jbzip2-0.9.jar uk.ac.babraham.FastQC.FastQCApplication $input_path`)
+    curr_dir = replace(input_fastqc_path, "\\fastqc\\FastQC" => "")
+    cd(curr_dir*"\\src")
+end
+
+# Cutadapt Run for Linux
+function cutadaptUnix(adapter_seqs_str::String, input_file::String)
+    run(`cutadapt -j 0 $adapter_seqs_str -o without_adapters.fastq $input_file`)
+end
+
+# Cutadapt Run for Windows
+function cutadaptWindows(input_cutadapt_path::String, adapter_seqs_str::String, file_fastx::String)
+    cd(input_cutadapt_path)
+    run(`cutadapt-3.4.exe $adapter_seqs_str -o without_adapters.fastq $file_fastx`) # Windows
+    curr_dir = replace(input_cutadapt_path, "\\cutadapt" => "")
+    cd(curr_dir*"\\src")
+end 
+
+# Function for reading adapter from FastQC File
+function read_adapter(fastqc_result_path::String)
+            
+    global fastqc_res = ZipFile.Reader(fastqc_result_path)
+
+    flag = false
+    seqs = String[]
+    counts = String[]
+    percentages = String[]
+    sources = String[]
+    adapter_seq_str = ""
+
+    for file in fastqc_res.files
+        if contains(file.name, "fastqc_data.txt")
+            for line in eachline(file)
+                if contains(line, ">>Overrepresented")
+                    flag = true
+                    continue
+                end
+
+                if flag == true && contains(line, ">>END_MODULE")
+                    flag = false
+                    break
+                end
+
+                if flag && !contains(line, "#")
+                    seq, count, percentage, source = split(line, "\t")
+                    if string(source) != "No Hit"
+                        push!(seqs, seq)
+                        push!(counts, count)
+                        push!(percentages, percentage)
+                        push!(sources, source)
+                    end
+                end
+            end
+        end
+    end 
+
+    if length(seqs) == 0
+        #TODO
+        adapter_seq_str = "no adapter seq"
+    else
+
+        for adapter_seq in seqs
+            adapter_seq_str *= "-a $adapter_seq "
+        end
+    end
+
+    return seqs, sources, string(strip(adapter_seq_str))
+end
 
 # FastQC and Cutadapt Run for different OS Linux, Windows
 function func()
-    print("\n\nDo you want to run FastQC to get a possible Source for an Adapter Sequence, which could be found in your input-file?\n If yes, type 'y'. If no, type 'n'. You can enter an individual Adapter sequence afterwards on request.\n\n")
-    
-    answer = readline()
-    if answer == "y"
-        if Sys.islinux()
-            # FastQC Run for OS Linux
+    org_fastq_file_path = ""
+    work_path = ""
+    file_name = ""
 
-            function fastqcUnix(input_path::String, output_path::String)
-                run(`fastqc $input_path -o $output_path`)
+    while true
+        print("\nEnter path of your FASTQ file. Or type 'q' to quit.\n>>> ")
+
+        input = string(strip(readline()))
+        if input == "q"
+            println("Bye.")
+            exit()
+        elseif isfile(input)
+            if endswith(input, ".fastq")
+                org_fastq_file_path = input
+                break
+            else
+                println("ERROR:\nFile input is not a FASTQ File. Check your path again.")
             end
-            fastqcUnix(fastqFile, path_to_fastqc)
-            
-        else 
-            # FastQC Run for Windows
-            
-            function fastqcWindows(input_path::String, output_path::String)
-                cd(path_to_fastqc)
-                run(`java -Xmx250m -classpath .";"./sam-1.103.jar";"./jbzip2-0.9.jar uk.ac.babraham.FastQC.FastQCApplication $input_path`)
-                curr_dir = replace(path_to_fastqc, "\\fastqc\\FastQC" => "")
-                cd(curr_dir*"\\src")
-            end
-            
-            #fastqcWindows(fastqFile, path_to_fastqc)
+        else
+            println("ERROR:\nFile not found. Check your path again and enter on request.")
         end
+    end
 
-        print("\nFastQC successful.\n")
-        print("\nReading adapter sequences...\n")
+    # 
+    file_name, work_path = get_path_variable(org_fastq_file_path)
 
-        # Function for reading adapter from FastQC File
-        function read_adapter(fastqc_result_path::String)
+    cd(work_path)
+
+    while true 
+        print("\nDo you want to run FastQC to get a possible Source for an Adapter Sequence, which could be found in your input-file?
+                 \nIf yes, type 'y'.
+                 \nIf no, type 'n'. Then you can enter an individual Adapter sequence afterwards on request.
+                 \nOr type 'q' to quit.
+                 \n>>> ")
+
+        input = readline()
+
+        if input == "q"
+            println("Bye.")
+            exit()
+
+        elseif input == "y"
+        
+            if Sys.islinux()
+                # FastQC Run for OS Linux
+                fastqcUnix(file_name*".fastq")
+            else 
+                # FastQC Run for Windows
+                fastqcWindows(path_to_fastqc, org_fastq_file_path, path_to_fastqc)
+            end
+
+            println("\nFastQC successful.")
+
+            println("\nReading adapter sequences...")
+
+            if Sys.islinux()
+                adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(file_name*"_fastqc.zip")
+            else
+                adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(work_path*"\\"*file_name*"_fastqc.zip")
+            end
             
-            global fastqc_res = ZipFile.Reader(fastqc_result_path)
-            flag = false
-            seqs = String[]
-            counts = String[]
-            percentages = String[]
-            sources = String[]
-            adapter_seq_str = ""
+            println("Adapters found:")
 
-            for file in fastqc_res.files
-                if contains(file.name, "fastqc_data.txt")
-                    for line in eachline(file)
-                        if contains(line, ">>Overrepresented")
-                            flag = true
-                            continue
-                        end
-
-                        if flag == true && contains(line, ">>END_MODULE")
-                            flag = false
-                            break
-                        end
-
-                        if flag && !contains(line, "#")
-                            seq, count, percentage, source = split(line, "\t")
-                            if string(source) != "No Hit"
-                                push!(seqs, seq)
-                                push!(counts, count)
-                                push!(percentages, percentage)
-                                push!(sources, source)
-                            end
-                        end
-                    end
+            if startswith(adapter_seq_str, "no")
+                println("\t"*adapter_seq_str)
+                break
+            else
+                for i = 1 : length(adapter_seqs)
+                    println(adapter_seqs[i], adapter_sources[i])
                 end
-            end 
 
-            for adapter_seq in seqs
-                adapter_seq_str *= "-a $adapter_seq "
+                # Run Cutadapt
+                if Sys.islinux()
+                    cutadaptUnix(adapter_seq_str, file_name*".fastq")
+                    break
+                else
+                    #  Windows
+                    cutadaptWindows(path_to_cutadapt, adapter_seq_str, work_path*"\\"*file_name*".fastq")
+                    break
+                end
             end
 
-            return seqs, sources, string(strip(adapter_seq_str))
+        elseif input == "n"
+            print("\nPlease type in your adapter sequence:\n>>> ")
+
+            adapter_seq = readline()
+
+            if contains(adapter_seq, r"[^atcgATCG]")
+                println("\n warning check again")
+            else
+                # Run Cutadapt
+                if Sys.islinux()
+                    cutadaptUnix("-a "*adapter_seq, file_name*".fastq")
+                    break
+                else
+                    cutadaptWindows(path_to_cutadapt, adapter_seq_str, work_path*"\\"*file_name*".fastq")
+                    break
+                end
+            end
+
+        else
+            println("ERROR:\nWrong input.")
         end
-
-        fastqc_zip_file = replace(fastqFile, ".fastq" => "_fastqc.zip")
-        print(fastqc_zip_file)
-        adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(fastqc_zip_file)
-        print("\nSuccessful.\n")
-
-        println("Adapters found:")
-        println(adapter_seqs, adapter_sources, adapter_seq_str)
-
-        # Run Cutadapt
-        cutadapt(adapter_seq_str, fastqFile)
-   
-    elseif answer=="n"
-        print("\nPlease type in your adapter sequence:\n")
-        adapter_seq = readline()
-        cutadapt(adapter_seq, fastqFile)
-    else
-        print("Wrong input.")
-        func()
     end
 end
-
-# call function func for FastQC and Cutadapt Run
-# TODO change name
 func()
 
 # Read adapterfree fastq File and store into records
-function readFastq(file_path::String)
-    print("Reading file without adapters...")
-    reader = FASTQ.Reader(open(file_path, "r"))
+function readFastq(input_file::String)
+    # println("Reading file without adapters...")
+    reader = FASTQ.Reader(open(input_file, "r"))
     records = []
     for record in reader
         push!(records, record)
@@ -200,15 +229,9 @@ function readFastq(file_path::String)
     return records
 end
 
-# find file without adapters 
-file_without_adapters_file = path_to_cutadapt*"\\file_without_adapters.fastq"
-
-# read fastq into records
-fastq_records = readFastq(file_without_adapters_file)
-
 # Read adapterfree fastq File and store into records
-function readFasta(file_path::String)
-    reader = FASTA.Reader(open(file_path, "r"))
+function readFasta(input_file::String)
+    reader = FASTA.Reader(open(input_file, "r"))
     records = []
     for record in reader
         push!(records, record)
@@ -218,7 +241,7 @@ function readFasta(file_path::String)
 end
 
 # Collect garbage and free memory 
-function free_memory(variable)
+function free_memory(variable::Any)
     empty!(variable)
     GC.gc()
 end
@@ -234,17 +257,24 @@ function getParamForTrimming()
         getParamForTrimming()
     end
 end
+
+# find file without adapters 
+file_without_adapters_file = path_to_cutadapt*"\\without_adapters.fastq"
+
+# read fastq into records
+fastq_records = readFastq(file_without_adapters_file)
+
 threshold_Param = getParamForTrimming()
 
 # Trimming
-function trimming(fileName::String, org_records::Vector{Any}, threshold::UInt8, min_length::Int)
+function trimming(input_file::String, input_records::Vector{Any}, threshold::UInt8, min_read_length::Int)
     
-    println("\n Preparing trimming...")
+    println("\n Preparing trimming...\n")
     fileName = replace(fileName, ".fastq" => "")
     fn = string(fileName)*"_trimmed.fastq"
-    file = FASTQ.Writer(open(fn, "w"),true)
+    file = FASTQ.Writer(open("trimmed.fastq", "w"), true)
     
-    for record in org_records
+    for record in input_records
         quality_list = quality(record)
         seq_list = sequence(String, record)
         count = 0
@@ -284,65 +314,66 @@ function trimming(fileName::String, org_records::Vector{Any}, threshold::UInt8, 
             write(file, record) 
         end
     end
-
-    # return trimmed_records
+    return trimmed_records
     close(file)
     free_memory(fastq_records)
-    println(string(fn))
+    # println(string(fn))
     println("Successful.")
     return string(fn)
 end
 
 #TODO threshold and min_length should als parameter 
-fileForVSearch = trimming(fastqFile, fastq_records, threshold_Param, 30) 
+fileForVSearch = trimming(work_path*"\\"*file_name*".fastq", fastq_records, threshold_Param, 30) 
 
 # VSearch Run for different OS Linux, Windows
-if Sys.islinux()
-    function vsearchrun(input_path::String)
+function vsearchrun(input_vsearch_path::String, input_path::String)
+    if Sys.islinux()
         run(`vsearch --uchime3_denovo $input_path --nonchimeras nonchimeras.fasta`)
-    end
-else
-    println(pwd())
-    
-    function vsearchrun(input_path::String)
-        cd(path_to_vsearch)
+    else
+        # println(pwd())
+        cd(input_fastqc_path)
         run(`vsearch --uchime3_denovo $input_path --nonchimeras nonchimeras.fasta`)
-        curr_dir = replace(path_to_vsearch, "\\vsearch\\vsearch\\bin" => "")
+        curr_dir = replace(input_fastqc_path, "\\vsearch\\vsearch\\bin" => "")
         cd(curr_dir*"\\src")
     end
 end
 
 # run vsearch
-vsearchrun(fileForVSearch)
+vsearchrun(path_to_vsearch, fileForVSearch)
 
-# find vsearch file and read into records
+# # find vsearch file and read into records
 vsearch_file = path_to_vsearch*"\\nonchimeras.fasta"
 recs = readFasta(vsearch_file)
 
-# Enter kmer size
-function foo()
+function kmer_input()
     
     println("\nEnter a kmer-size:\n")
     n = parse(UInt8, readline())
     if n != UInt8
         println("\nWrong input.\n")
-        foo()
+        kmer_input()
     else
         return n
     end
-
 end
 
-# Save size into variable for func newReads()
-kmer_size = foo()
+kmer_size = kmer_input()
 
+# Write FASTQ File filled with record
+# function writeFASTQ(fileName::String, completely_Filtered::Vector{Any})
+#     file = FASTQ.Writer(open(string(fileName)*".fastq", "w"), true)
+#     for record in completely_Filtered
+#         write(file, record)
+#     end
+#     close(file)
+# end
 
 # Count frequent kmers
 function kmers_Histo(k, records)
     kmer_dict = Dict{String,Integer}()
 
     for record in records
-        rec_seq = string(FASTQ.sequence(record))
+        rec_seq = string(FASTA.sequence(record))
 
         for i = 1:((length(rec_seq) - k) + 1)
             sequence_k = rec_seq[i:((i+k)-1)]
@@ -377,6 +408,7 @@ function hammingDistance(kmer)
         end
 
     end
+
     return neighbors
 end
 
@@ -387,7 +419,7 @@ function newReads(kmersHisto, recs, t, k)
     
     for rec in recs
 
-        seq = string(FASTQ.sequence(rec))
+        seq = string(FASTA.sequence(rec))
         n_Kmers = (length(seq) - k) + 1
 
         for i = 1:n_Kmers
@@ -427,6 +459,5 @@ function newReads(kmersHisto, recs, t, k)
     close(file)
 end 
 
-newReads(kmers_Histo_Dict, recs, threshold_Param, kmer_size)
+# newReads(kmers_Histo_Dict, recs, threshold_Param, kmer_size)
 
-end # module
