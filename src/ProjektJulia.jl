@@ -36,7 +36,7 @@ function fastqcUnix(input_file::String)
     run(`fastqc $input_file`)
 end
 
-# FastQC Memory Function
+# FastQC Windows Function
 function fastqcWindows(input_fastqc_path::String, input_path::String, output_path::String)
     cd(input_fastqc_path)
     run(`java -Xmx250m -classpath .";"./sam-1.103.jar";"./jbzip2-0.9.jar uk.ac.babraham.FastQC.FastQCApplication $input_path`)
@@ -109,11 +109,13 @@ function read_adapter(fastqc_result_path::String)
 end
 
 # FastQC and Cutadapt Run for different OS Linux, Windows
-function func()
+function communication()
     org_fastq_file_path = ""
     work_path = ""
     file_name = ""
+    with_adapter = true
 
+    # input file 
     while true
         print("\nEnter path of your FASTQ file. Or type 'q' to quit.\n>>> ")
 
@@ -133,11 +135,13 @@ function func()
         end
     end
 
-    # 
+    # Get Path
     file_name, work_path = get_path_variable(org_fastq_file_path)
 
+    # Open Path Directory
     cd(work_path)
 
+    # fastqc and cutadapt
     while true 
         print("\nDo you want to run FastQC to get a possible Source for an Adapter Sequence, which could be found in your input-file?
                  \nIf yes, type 'y'.
@@ -161,9 +165,9 @@ function func()
                 fastqcWindows(path_to_fastqc, org_fastq_file_path, path_to_fastqc)
             end
 
-            println("\nFastQC successful.")
+            println("\nFastQC successful.\n")
 
-            println("\nReading adapter sequences...")
+            println("\nReading adapter sequences...\n")
 
             if Sys.islinux()
                 adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(file_name*"_fastqc.zip")
@@ -171,9 +175,10 @@ function func()
                 adapter_seqs, adapter_sources, adapter_seq_str = read_adapter(work_path*"\\"*file_name*"_fastqc.zip")
             end
             
-            println("Adapters found:")
+            println("\nAdapters found:\n")
 
             if startswith(adapter_seq_str, "no")
+                with_adapter = false
                 println("\t"*adapter_seq_str)
                 break
             else
@@ -195,9 +200,15 @@ function func()
         elseif input == "n"
             print("\nPlease type in your adapter sequence:\n>>> ")
 
-            adapter_seq = readline()
+            adapter_seq = string(strip(readline()))
 
-            if contains(adapter_seq, r"[^atcgATCG]")
+            if adapter_seq == ""
+                with_adapter = false
+                #TODO
+                println("no adapter seq")
+                break
+            elseif contains(adapter_seq, r"[^atcgATCG]")
+                #TODO
                 println("\n warning check again")
             else
                 # Run Cutadapt
@@ -211,11 +222,98 @@ function func()
             end
 
         else
+            #TODO
             println("ERROR:\nWrong input.")
         end
     end
+
+    if Sys.islinux()
+        # Read fastq after cutadapt
+        if with_adapter
+            records = readFastq("without_adapters.fastq")
+        else
+            records = readFastq(file_name*".fastq")
+        end
+    else
+        if with_adapter
+            # find file without adapters 
+            file_without_adapters_file = path_to_cutadapt*"\\without_adapters.fastq"
+    
+            # read fastq into records
+            records = readFastq(file_without_adapters_file)
+        else
+            records = readFastq(work_path*"\\"*file_name*".fastq")
+    end
+
+    # input: threshould and min_length
+    trimm_threshold = getCheckParameter("threshold", 3, 5)
+    trimm_min_length = getCheckParameter("Minimum length", 30)
+
+    # trimming
+    trimming(records, trimm_threshold, trimm_min_length)
+
+    # vsearch
+    if Sys.islinux()
+        vsearchUnix()
+    else
+        fileForVSearch = trimming(work_path*"\\"*file_name*".fastq", fastq_records, threshold_Param, 30) 
+        vsearchrun(path_to_vsearch, fileForVSearch)
+    end
+
+    # read fasta
+    if Sys.islinux()
+        records = readFasta("nonchimeras.fasta")
+    else
+        # find vsearch file and read into records
+        vsearch_file = path_to_vsearch*"\\nonchimeras.fasta"
+        records = readFasta(vsearch_file)
+    end
+
+    # input: kmer
+    kmer = getCheckParameter("Kmer", 8, 55)
+
+    kmers_Histo_Dict = kmers_Histo(kmer, records)
+
+    # input: newRead threshold
+    newReads_threshold = getCheckParameter("newRead threshold", 6)
+
+    newReads(kmers_Histo_Dict, records, newReads_threshold, kmer)
+
+    #### Only for Linux Operating System
+
+    # Hisat2 1. Step: build index,  2. Step Alignment
+    while true
+        println("index")
+        input = string(strip(readline()))
+        if input == "q"
+            exit()
+        elseif input == "y"  # ohne index
+
+            println("file")
+
+            input_file = string(strip(readline())) #hg38.fa
+
+            hisat2_build_Unix(input_file)
+            hisat2Unix()
+            break
+        elseif input == "n"
+            println("index file")
+
+            input_file = string(strip(readline())) # index
+
+            hisat2Unix(input_file)
+            break
+        else
+            println("again")
+        end
+    end
+
+    # Samtools
+    if Sys.islinux()
+        samtoolsUnix()
+    end
+
 end
-func()
 
 # Read adapterfree fastq File and store into records
 function readFastq(input_file::String)
@@ -247,31 +345,40 @@ function free_memory(variable::Any)
 end
 
 # Get threshold parameter for the trimming function
-function getParamForTrimming()
-    print("\nEnter threshold for trimming (3/4/5): \n\n")
-    n = parse(UInt8, readline())
-    if n==3 || n==4 || n==5
-        return n
-    else
-        print("You can only enter a threshold size of 3, 4 or 5. Please enter again.")
-        getParamForTrimming()
+function getCheckParameter(parameter::String, min::Int, max::Int)
+
+    while true
+        print("\n Parameter: ", parameter, " Minimum: ", min, " Maximum: ", max, "\n>>> ")
+
+        input_num = parse(Int, string(strip(readline())))
+
+        if input_num >= min && input_num <= max
+            return input_num
+        else
+            print("You can only enter a threshold size of 3, 4 or 5. Please enter again.")
+        end
     end
 end
 
-# find file without adapters 
-file_without_adapters_file = path_to_cutadapt*"\\without_adapters.fastq"
+# Get threshold parameter for the trimming function (Overwrite)
+function getCheckParameter(parameter::String, min::Int)
 
-# read fastq into records
-fastq_records = readFastq(file_without_adapters_file)
+    while true
+        print("\n Parameter: ", parameter, " Minimum: ", min, "\n>>> ")
 
-threshold_Param = getParamForTrimming()
+        input_num = parse(Int, string(strip(readline())))
+
+        if input_num >= min
+            return input_num
+        else
+            print("You can only enter a threshold size of 3, 4 or 5. Please enter again.")
+        end
+    end
+end
 
 # Trimming
-function trimming(input_file::String, input_records::Vector{Any}, threshold::UInt8, min_read_length::Int)
-    
-    println("\n Preparing trimming...\n")
-    fileName = replace(fileName, ".fastq" => "")
-    fn = string(fileName)*"_trimmed.fastq"
+function trimming(input_records::Vector{Any}, threshold::Int=3, min_read_length::Int=30)
+
     file = FASTQ.Writer(open("trimmed.fastq", "w"), true)
     
     for record in input_records
@@ -281,7 +388,7 @@ function trimming(input_file::String, input_records::Vector{Any}, threshold::UIn
         position = 0
 
         # 'N' und short-reads skip
-        if length(seq_list) < min_length || contains(seq_list, 'N')
+        if length(seq_list) < min_read_length || contains(seq_list, 'N')
             continue
         end
         
@@ -299,7 +406,7 @@ function trimming(input_file::String, input_records::Vector{Any}, threshold::UIn
         if count == threshold 
 
             # only work with long-reads 
-            if (position-threshold) >= min_length
+            if (position-threshold) >= min_read_length
 
                 # New Sequence with new Quality
                 new_seq = sequence(String, record, (1:position-threshold))
@@ -314,16 +421,9 @@ function trimming(input_file::String, input_records::Vector{Any}, threshold::UIn
             write(file, record) 
         end
     end
-    return trimmed_records
+    free_memory(input_records)
     close(file)
-    free_memory(fastq_records)
-    # println(string(fn))
-    println("Successful.")
-    return string(fn)
 end
-
-#TODO threshold and min_length should als parameter 
-fileForVSearch = trimming(work_path*"\\"*file_name*".fastq", fastq_records, threshold_Param, 30) 
 
 # VSearch Run for different OS Linux, Windows
 function vsearchrun(input_vsearch_path::String, input_path::String)
@@ -338,13 +438,6 @@ function vsearchrun(input_vsearch_path::String, input_path::String)
     end
 end
 
-# run vsearch
-vsearchrun(path_to_vsearch, fileForVSearch)
-
-# # find vsearch file and read into records
-vsearch_file = path_to_vsearch*"\\nonchimeras.fasta"
-recs = readFasta(vsearch_file)
-
 function kmer_input()
     
     println("\nEnter a kmer-size:\n")
@@ -356,17 +449,6 @@ function kmer_input()
         return n
     end
 end
-
-kmer_size = kmer_input()
-
-# Write FASTQ File filled with record
-# function writeFASTQ(fileName::String, completely_Filtered::Vector{Any})
-#     file = FASTQ.Writer(open(string(fileName)*".fastq", "w"), true)
-#     for record in completely_Filtered
-#         write(file, record)
-#     end
-#     close(file)
-# end
 
 # Count frequent kmers
 function kmers_Histo(k, records)
@@ -387,7 +469,6 @@ function kmers_Histo(k, records)
     return kmer_dict
 end
 
-kmers_Histo_Dict = kmers_Histo(kmer_size, recs)
 
 # Find neighbours from a kmer
 function hammingDistance(kmer)
@@ -459,5 +540,26 @@ function newReads(kmersHisto, recs, t, k)
     close(file)
 end 
 
-# newReads(kmers_Histo_Dict, recs, threshold_Param, kmer_size)
+# Hisat2 build index
+function hisat2_build_Unix(input_file::String)
+    run(`hisat2-build -p 4 $input_file index`)
+end
 
+# Hisat2 Alignment
+function hisat2Unix()
+    run(`hisat2 -p 4 --dta -x index -f nonchimeras.fasta -S alignment`)
+end
+
+# Hisat2 Alignment (Overwrite) 
+function hisat2Unix(input_index::String)
+    run(`hisat2 -p 4 --dta -x $input_index -f nonchimeras.fasta -S alignment`)
+end
+
+# Samtool Output to Scaffolds
+function samtoolsUnix()
+    run(`samtools sort alignment.sam -o sorted_alignment.bam`)
+    run(`samtools index sorted_alignment.bam`)
+    run(`samtools idxstats sorted_alignment.bam ">" scaffolds.txt`)
+end
+
+communication()
