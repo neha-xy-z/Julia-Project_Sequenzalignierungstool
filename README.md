@@ -25,7 +25,7 @@ Für Linux muss diese über `sudo apt-get <Software>` vorinstalliert werden.<br>
 Für Windows muss dieser Ordner heruntergeladen werden.
 _Hinweis_: Da Windows kein Hisat2 und Samtools verwenden kann, wird auch keine Alignment stattfinden. Die Ausführung mit Windows endet mit der Readaufbereitung.
 
-# Verwendung
+## Verwendung
 1. Öffne Julia.
 2. Wechsele ins Working Directory, wo sich auch die ProjektJulia.jl befindet. <br>
 ` cd("Path to .jl File") `
