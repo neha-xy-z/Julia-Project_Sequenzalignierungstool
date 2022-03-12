@@ -2,7 +2,7 @@
 Autoren: 
 Al-Juboori, Faisal;
 Kandhari, Neha;
-Li, Huije
+Li, Huijie
 
 - [File Input](#file-input)
 - [FastQC](#fastqc)
