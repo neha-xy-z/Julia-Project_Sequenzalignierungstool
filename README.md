@@ -1,8 +1,5 @@
 # Sequenzalignierungstool
-Autoren: 
-Al-Juboori, Faisal;
-Kandhari, Neha;
-Li, Huije
+Für das B.Sc. Modul BI2024 Einführung in die Programmiersprache Julia WiSe21/22 <br>
 
 - [Kurzbeschreibung](#kurzbeschreibung)
 - [Benötigte Software](#benötigte-software)
@@ -35,3 +32,5 @@ _P.S.: Wir haben keinen STAR Aligner verwendet, weil diese Software **30 GB RAM*
 ` cd("Path to .jl File") `
 3. Führe nun die .jl-Datei mit aus `include("ProjektJulia.jl")`
 4. Befolge nun die Anweisungen.
+
+Autoren: Neha Kandhari, Faisal Al-Juboori, Huijie Li
